@@ -1,0 +1,22 @@
+{
+    "name": "wow-bot",
+    "version": "0.0.1",
+    "description": "WOW!",
+    "main": "app.js",
+    "type": "module",
+    "scripts": {
+        "start": "node app.js"
+    },
+    "author": "Rob Gries",
+    "license": "MIT",
+    "dependencies": {
+        "discord-interactions": "^3.2.0",
+        "discord.js": "^13.6.0",
+        "dotenv": "^16.0.0",
+        "express": "^4.17.3",
+        "node-fetch": "^3.2.4"
+    },
+    "devDependencies": {
+        "nodemon": "^2.0.15"
+    }
+}
