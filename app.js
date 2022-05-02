@@ -1,93 +1,84 @@
 import 'dotenv/config';
+import { Client, Intents } from 'discord.js';
+import { AudioPlayerStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from '@discordjs/voice';
 import fetch from 'node-fetch';
-import express from 'express';
-import {
-  InteractionType,
-  InteractionResponseType,
-  InteractionResponseFlags,
-  MessageComponentTypes,
-  ButtonStyleTypes,
-} from 'discord-interactions';
-import { VerifyDiscordRequest, DiscordRequest } from './utils.js';
-import {
-    TEST_COMMAND,
-    HasGuildCommands,
-    WOW_COMMAND,
-  } from './commands.js';
-  
+import * as fs from 'fs';
+import { deleteGuildCommand } from './commands.js';
 
-// Create an express app
-const app = express();
-
-// Parse request body and verifies incoming requests using discord-interactions package
-app.use(express.json({ verify: VerifyDiscordRequest(process.env.PUBLIC_KEY) }));
-
-/**
- * Interactions endpoint URL where Discord will send HTTP requests
- */
- app.post('/interactions', async function (req, res) {
-     // Interaction type and data
-    const { type, id, data } = req.body;
-
-    /**
-     * Handle verification requests
-     */
-    if (type === InteractionType.PING) {
-        return res.send({ type: InteractionResponseType.PONG });
-    }
-
-      /**
-     * Handle slash command requests
-     * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
-     */
-    if (type === InteractionType.APPLICATION_COMMAND) {
-        const { name } = data;
-
-        // "test" guild command
-        if (name === 'test') {
-            // Send a message into the channel where command was triggered from
-            return res.send({
-                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                    content: 'Wow! ',
-                },
-            });
-        }
-
-        if (name === 'wow') {
-            try {
-                const wowResponse = await fetch('https://owen-wilson-wow-api.herokuapp.com/wows/random');
-                const wowData = await wowResponse.json();
-                console.log(wowData);
-                
-                for (const wow of wowData) {
-                    // Send a message into the channel where command was triggered from
-                    return res.send({
-                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                        data: {
-                            content: `> ${wow.full_line}\n> ~ Owen Wowson ("${wow.movie}" at ${wow.timestamp})\n${wow.poster}`,
-                        },
-                    });
-                }
-            } catch (e) {
-                console.error(e);
-                return res.send({
-                    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                    data: {
-                        content: 'Wow! Something went wrong!',
-                    },
-                });
-            }
-        }
-    }
+const downloadFile = (async (url, path) => {
+    const res = await fetch(url);
+    const fileStream = fs.createWriteStream(path);
+    await new Promise((resolve, reject) => {
+        res.body.pipe(fileStream);
+        res.body.on("error", reject);
+        fileStream.on("finish", resolve);
+    });
 });
 
-app.listen(3000, () => {
-    console.log('Listening on port 3000');
-  
+const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES] });
+
+client.once('ready', () => {
     // Check if guild commands from commands.json are installed (if not, install them)
-    HasGuildCommands(process.env.APP_ID, process.env.GUILD_ID, [
-      TEST_COMMAND,
-      WOW_COMMAND,
-    ]);
+    // HasGuildCommands(process.env.APP_ID, process.env.GUILD_ID, [
+    //     WOW_COMMAND,
+    // ]);
+    deleteGuildCommand(process.env.APP_ID, process.env.GUILD_ID, '970391289868738560');
+    console.log('Ready!');
+});
+
+client.login(process.env.DISCORD_TOKEN);
+
+let connection = null;
+const player = createAudioPlayer();
+const queue = [];
+let timer = null;
+
+client.on('interactionCreate', async interaction => {
+	if (!interaction.isCommand()) return;
+    
+	if (interaction.commandName === 'wow') {
+        clearTimeout(timer);
+        connection = joinVoiceChannel({
+            channelId: interaction.member.voice.channel.id,
+            guildId: interaction.guildId,
+            adapterCreator: interaction.guild.voiceAdapterCreator,
+        });
+        connection.subscribe(player);
+        const wowResponse = await fetch('https://owen-wilson-wow-api.herokuapp.com/wows/random?results=5');
+        const wowData = await wowResponse.json();
+        let i = 0;
+        for (const wow of wowData) {
+            await downloadFile(wow.audio, `test${i}.mp3`)
+
+            if (queue.length > 0 || i > 0) {
+                queue.push(`test${i}.mp3`);
+            } else {
+                const resource = createAudioResource(`test${i}.mp3`, {
+                    metadata: {
+                        title: 'A good song!',
+                    },
+                });
+                player.play(resource);
+            }
+            i++;
+        }
+		await interaction.reply('Wow!');
+	}
+});
+
+player.on(AudioPlayerStatus.Idle, () => {
+    if (queue.length > 0) {
+        const filename = queue.shift();
+        const resource = createAudioResource(filename, {
+            metadata: {
+                title: 'A good song!',
+            },
+        });
+        player.play(resource);
+    } else {
+        timer = setTimeout(() => {
+            player?.stop();
+            connection?.destroy();
+        }, 1000 * 30);
+    }
 });

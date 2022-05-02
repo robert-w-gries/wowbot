@@ -42,12 +42,14 @@ export async function InstallGuildCommand(appId, guildId, command) {
   }
 }
 
-// Simple test command
-export const TEST_COMMAND = {
-  name: 'test',
-  description: 'Basic guild command',
-  type: 1,
-};
+export async function deleteGuildCommand(appId, guildId, commandId) {
+  const endpoint = `applications/${appId}/guilds/${guildId}/commands/${commandId}`;
+  try {
+    await DiscordRequest(endpoint, { method: 'DELETE' });
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 export const WOW_COMMAND = {
   name: 'wow',
