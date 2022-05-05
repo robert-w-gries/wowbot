@@ -19,7 +19,6 @@ const parseOption = (target, str) => {
 const myArgs = process.argv.slice(2);
 const deleteCommands = myArgs.map(arg => parseOption('--delete', arg)).filter(v => !!v);
 const installCommands = myArgs.map(arg => parseOption('--install', arg)).filter(v => !!v);
-console.log(installCommands);
 
 const downloadFile = (async (url, path) => {
     const res = await fetch(url);
