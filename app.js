@@ -3,6 +3,8 @@ import { Client, Intents } from 'discord.js';
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from '@discordjs/voice';
 import fetch from 'node-fetch';
 import * as fs from 'fs';
+import { temporaryFile } from 'tempy';
+import fsPromises from 'node:fs/promises';
 import { deleteGuildCommand, installGuildCommand, updateGuildCommand, getGuildCommands } from './commands.js';
 
 const parseOption = (target, str) => {
@@ -57,15 +59,35 @@ client.login(process.env.DISCORD_TOKEN);
 let connection = null;
 const player = createAudioPlayer();
 const queue = [];
-const MAX_QUEUE_LENGTH = 100;
-const MAX_WOWS = 20;
-let timer = null;
+const MAX_WOWS = 91;
+let disconnectTimer = null;
+let wowPlayingPath = null;
+
+const filePlayer = (link) => {
+    const tmpPath = temporaryFile();
+    const downloadPromise = downloadFile(link, tmpPath);
+    return {
+        play: async () => {
+            await downloadPromise;
+            const resource = createAudioResource(tmpPath, {
+                metadata: {
+                    title: 'Wow!',
+                },
+            });
+            player.play(resource);
+            wowPlayingPath = tmpPath;
+        }
+    }
+}
 
 client.on('interactionCreate', async interaction => {
 	if (!interaction.isCommand()) return;
     
 	if (interaction.commandName === 'wow') {
-        clearTimeout(timer);
+        if (disconnectTimer) {
+            clearTimeout(disconnectTimer);
+            disconnectTimer = null;
+        }
         connection = joinVoiceChannel({
             channelId: interaction.member.voice.channel.id,
             guildId: interaction.guildId,
@@ -76,23 +98,13 @@ client.on('interactionCreate', async interaction => {
         numWows = numWows > MAX_WOWS ? MAX_WOWS : numWows;
         const wowResponse = await fetch(`https://owen-wilson-wow-api.herokuapp.com/wows/random?results=${numWows}`);
         const wowData = await wowResponse.json();
-        let i = 0;
-        for (const wow of wowData) {
-            const download = downloadFile(wow.audio, `test${i}.mp3`)
-
-            if ((queue.length > 0 || i > 0) && queue.length < MAX_QUEUE_LENGTH) {
-                queue.push(`test${i}.mp3`);
+        wowData?.forEach((wow, i) => {
+            if (queue.length === 0 && i === 0) {
+                filePlayer(wow.audio).play();
             } else {
-                await download;
-                const resource = createAudioResource(`test${i}.mp3`, {
-                    metadata: {
-                        title: 'A good song!',
-                    },
-                });
-                player.play(resource);
+                queue.push(filePlayer(wow.audio));
             }
-            i++;
-        }
+        });
         const wowPlaying = wowData.map((d, i) => `${i + 1}. "${d.full_line}" ~ ${d.character} (${d.movie})`)
 		await interaction.reply('Wow Playing:\n' + wowPlaying.join('\n'));
 	}
@@ -103,19 +115,20 @@ client.on('interactionCreate', async interaction => {
 // ambient wow - slow down 1000x like the Justin bieber slowed down
 // https://soundcloud.com/mesiuepiescha/justin-bieber-u-smile-slowed-down-800?utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing
 
-player.on(AudioPlayerStatus.Idle, () => {
-    if (queue.length > 0) {
-        const filename = queue.shift();
-        const resource = createAudioResource(filename, {
-            metadata: {
-                title: 'A good song!',
-            },
-        });
-        player.play(resource);
-    } else {
-        timer = setTimeout(() => {
+player.on(AudioPlayerStatus.Idle, async () => {
+    if (wowPlayingPath) {
+        await fsPromises.rm(wowPlayingPath, { force: true });
+        wowPlayingPath = null;
+    }
+
+    if (queue.length === 0) {
+        disconnectTimer = setTimeout(() => {
             player?.stop();
             connection?.destroy();
         }, 1000 * 30);
+        return;
     }
+
+    const myPlayer = queue.shift();
+    myPlayer.play();
 });
