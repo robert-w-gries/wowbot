@@ -3,10 +3,10 @@ import { Client, Intents } from 'discord.js';
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from '@discordjs/voice';
 import fetch from 'node-fetch';
 import * as fs from 'fs';
-import { HasGuildCommands, WOW_COMMAND } from './commands.js';
+import { deleteGuildCommand, installGuildCommand, updateGuildCommand, getGuildCommands } from './commands.js';
 
 const parseOption = (target, str) => {
-    if (!target) {
+    if (!str) {
         return null;
     }
     const [arg, ...value] = str.split('=');
@@ -19,6 +19,7 @@ const parseOption = (target, str) => {
 const myArgs = process.argv.slice(2);
 const deleteCommands = myArgs.map(arg => parseOption('--delete', arg)).filter(v => !!v);
 const installCommands = myArgs.map(arg => parseOption('--install', arg)).filter(v => !!v);
+const updateCommands = myArgs.map(arg => parseOption('--update', arg)).filter(v => !!v);
 
 const downloadFile = (async (url, path) => {
     const res = await fetch(url);
@@ -32,11 +33,22 @@ const downloadFile = (async (url, path) => {
 
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES] });
 
-client.once('ready', () => {
+client.once('ready', async () => {
     // Check if guild commands from commands.json are installed (if not, install them)
-    HasGuildCommands(process.env.APP_ID, process.env.GUILD_ID, [
-        WOW_COMMAND,
-    ]);
+    const availableCommands = await getGuildCommands(process.env.APP_ID, process.env.GUILD_ID);
+    console.log("Available commands:\n" + Object.keys(availableCommands).join('\n') + '\n');
+
+    deleteCommands.forEach(commandName => {
+        if (commandName in availableCommands) {
+            deleteGuildCommand(process.env.APP_ID, process.env.GUILD_ID, availableCommands[commandName]);
+        }
+    });
+    installCommands.forEach(commandName => installGuildCommand(process.env.APP_ID, process.env.GUILD_ID, commandName));
+    updateCommands.forEach(commandName => {
+        if (commandName in availableCommands) {
+            updateGuildCommand(process.env.APP_ID, process.env.GUILD_ID, availableCommands[commandName]);
+        }
+    });
     console.log('Ready!');
 });
 

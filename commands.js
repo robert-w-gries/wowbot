@@ -1,21 +1,20 @@
 import { DiscordRequest } from './utils.js';
-
-export async function HasGuildCommands(appId, guildId, commands) {
-  if (guildId === '' || appId === '') return;
-
-  commands.forEach((c) => HasGuildCommand(appId, guildId, c));
-}
+import assert from 'node:assert/strict';
 
 // Checks for a command
-async function HasGuildCommand(appId, guildId, command, shouldUpdate=false) {
+export async function getGuildCommands(appId, guildId) {
   // API endpoint to get and post guild commands
   const endpoint = `applications/${appId}/guilds/${guildId}/commands`;
+  const availableCommands = {};
 
   try {
     const res = await DiscordRequest(endpoint, { method: 'GET' });
     const data = await res.json();
-
-    if (data) {
+    data?.forEach((command) => {
+      assert('name' in command);
+      availableCommands[command.name] = command;
+    })
+    /*if (data) {
       const installedNames = data.map((c) => c['name']);
       // This is just matching on the name, so it's not good for updates
       if (!installedNames.includes(command['name'])) {
@@ -28,67 +27,84 @@ async function HasGuildCommand(appId, guildId, command, shouldUpdate=false) {
       } else {
         console.log(`"${command['name']}" command already installed`);
       }
-    }
+    }*/
   } catch (err) {
     console.error(err);
   }
+  return availableCommands;
 }
 
-// Installs a command
-export async function InstallGuildCommand(appId, guildId, command) {
-  // API endpoint to get and post guild commands
+export async function installGuildCommand(appId, guildId, commandName, dryRun=true) {
   const endpoint = `applications/${appId}/guilds/${guildId}/commands`;
-  // install command
   try {
-    console.log("install")
-    await DiscordRequest(endpoint, { method: 'POST', body: command });
+    console.log("Installing " + commandName);
+    assert(commandName in COMMAND_LAYOUTS);
+    const commandToInstall = COMMAND_LAYOUTS[commandName];
+    if (dryRun) {
+      console.log(`await DiscordRequest(${endpoint}, { method: 'POST', body: ${commandToInstall} });`)
+      return;
+    }
+    await DiscordRequest(endpoint, { method: 'POST', body: commandToInstall });
   } catch (err) {
     console.error(err);
   }
 }
 
-export async function updateGuildCommand(appId, guildId, commandId, command) {
-  const endpoint = `applications/${appId}/guilds/${guildId}/commands/${commandId}`;
+export async function updateGuildCommand(appId, guildId, command, dryRun=true) {
+  assert('id' in command);
+  const endpoint = `applications/${appId}/guilds/${guildId}/commands/${command.id}`;
   try {
-    console.log('update id ' + commandId)
-    await DiscordRequest(endpoint, { method: 'PATCH', body: command });
+    console.log('Updating ' + command.name);
+    assert(command.name in COMMAND_LAYOUTS);
+    const commandToUpdate = COMMAND_LAYOUTS[command.name];
+    if (dryRun) {
+      console.log(`await DiscordRequest(${endpoint}, { method: 'PATCH', body: ${commandToUpdate} });`);
+      return;
+    }
+    await DiscordRequest(endpoint, { method: 'PATCH', body: commandToUpdate });
   } catch (err) {
     console.error(err);
   }
 }
 
-export async function deleteGuildCommand(appId, guildId, commandId) {
-  const endpoint = `applications/${appId}/guilds/${guildId}/commands/${commandId}`;
+export async function deleteGuildCommand(appId, guildId, command, dryRun=true) {
+  assert('id' in command);
+  const endpoint = `applications/${appId}/guilds/${guildId}/commands/${command.id}`;
   try {
-    console.log('delete id ' + commandId)
+    console.log("Deleting " + command.name);
+    if (dryRun) {
+      console.log(`await DiscordRequest(${endpoint}, { method: 'DELETE' });`);
+      return;
+    }
     await DiscordRequest(endpoint, { method: 'DELETE' });
   } catch (err) {
     console.error(err);
   }
 }
 
-export const WOW_COMMAND = {
-  name: 'wow',
-  description: 'Wow!',
-  type: 1,
-  options: [
-    {
-      name: 'num_wows',
-      description: 'Wow wow!',
-      type: 4,
-    },
-  ],
-};
-
-export const WOWMIX_COMMAND = {
-  name: 'wowmix',
-  description: "Wow that's what I call music!",
-  type: 1,
-  options: [
-    {
-      name: 'neil',
-      description: 'Wow wow!',
-      type: 2,
-    },
-  ],
+export const COMMAND_LAYOUTS = {
+  wow: {
+    name: 'wow',
+    description: 'Wow!',
+    type: 1,
+    options: [
+      {
+        name: 'num_wows',
+        description: 'Wow wow!',
+        type: 4,
+      },
+    ],
+  },
+  wowmix: {
+    name: 'wowmix',
+    description: "Wow that's what I call music!",
+    type: 1,
+    options: [
+      {
+        name: 'neil',
+        description: 'Wow wow!',
+        type: 2,
+      },
+    ],
+  }
 };
