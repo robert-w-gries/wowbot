@@ -155,20 +155,20 @@ client.on('interactionCreate', async interaction => {
             }
         });
         const wowPlaying = wowData.map((d, i) => `${i + 1}. "${d.full_line}" ~ ${d.character} (${d.movie})`)
-		await interaction.reply('Wow Playing:\n' + wowPlaying.join('\n'));
+		await interaction.reply({ content: 'Wow Playing:\n' + wowPlaying.join('\n'), ephemeral: true });
 	}
 
     if (interaction.commandName === 'wowstop') {
         player?.stop();
         connection?.destroy();
-        await interaction.reply({ ephemeral: true });
+        await interaction.reply({ content: 'Wow!', ephemeral: true });
     }
 
 	if (interaction.commandName === 'wowmix') {
         const target = interaction.options.getString('music');
         const paths = await getSongs(target);
         if (!paths) {
-            await interaction.reply(`Could not find song '${song}`);
+            await interaction.reply(`Could not find song or album, '${target}`);
             return;
         }
         connection = joinVoiceChannel({
@@ -185,7 +185,7 @@ client.on('interactionCreate', async interaction => {
             }
         });
         const wowPlaying = paths.map((p, i) => `${i + 1}. "${p}"`)
-		await interaction.reply('Wow Playing:\n' + wowPlaying.join('\n'));
+		await interaction.reply({ content: 'Wow Playing:\n' + wowPlaying.join('\n'), ephemeral: true });
     }
 });
 
