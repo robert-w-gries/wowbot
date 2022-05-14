@@ -96,5 +96,10 @@ export const COMMAND_LAYOUTS = {
     name: 'wowstop',
     description: "Wow! Make it stop!",
     type: 1,
+  },
+  wowclear: {
+    name: 'wowclear',
+    description: "Wow! Clear the queue!",
+    type: 1,
   }
 };

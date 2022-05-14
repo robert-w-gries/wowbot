@@ -81,7 +81,7 @@ client.login(process.env.DISCORD_TOKEN);
 
 let connection = null;
 const player = createAudioPlayer();
-const queue = [];
+let queue = [];
 const MAX_WOWS = 91;
 let disconnectTimer = null;
 let wowPlayingPath = null;
@@ -164,6 +164,12 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: 'Wow!', ephemeral: true });
     }
 
+    if (interaction.commandName === 'wowclear') {
+        player?.stop();
+        queue = [];
+        await interaction.reply({ content: 'Wow!', ephemeral: true });
+    }
+
 	if (interaction.commandName === 'wowmix') {
         const target = interaction.options.getString('music');
         const paths = await getSongs(target);
@@ -178,6 +184,7 @@ client.on('interactionCreate', async interaction => {
         });
         connection.subscribe(player);
         paths.forEach((path, i) => {
+            // TODO: need to properly implement a queue
             if (queue.length === 0 && i === 0) {
                 filePlayer(path).play();
             } else {
