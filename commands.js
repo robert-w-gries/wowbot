@@ -92,7 +92,7 @@ export const COMMAND_LAYOUTS = {
           name: 'music',
           description: 'Song or album to play',
           type: 3,
-          required: true,
+          required: false,
         }],
       },
       {
@@ -108,6 +108,26 @@ export const COMMAND_LAYOUTS = {
       {
         name: 'skip',
         description: 'Wow! Next!',
+        type: 1,
+      },
+      {
+        name: 'pause',
+        description: 'Wow! Hold up!',
+        type: 1,
+      },
+      {
+        name: 'unpause',
+        description: 'Wow! Proceed!',
+        type: 1,
+      },
+      {
+        name: 'np',
+        description: 'Wow Playing!',
+        type: 1,
+      },
+      {
+        name: 'playskip',
+        description: 'Wow! Play now!',
         type: 1,
       }
     ],

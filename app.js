@@ -58,6 +58,7 @@ const downloadFile = (async (url, path) => {
 
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES] });
 
+// TODO: Split out command management to separte 'manage.js' script
 client.once('ready', async () => {
     // Check if guild commands from commands.json are installed (if not, install them)
     const availableCommands = await getGuildCommands(process.env.APP_ID, process.env.GUILD_ID);
@@ -80,16 +81,19 @@ client.once('ready', async () => {
 client.login(process.env.DISCORD_TOKEN);
 
 let connection = null;
-const player = createAudioPlayer();
+const player = createAudioPlayer({ behaviors: { noSubscriber: 'pause' }});
 let queue = [];
 const MAX_WOWS = 91;
+const MAX_QUEUE_MESSAGE_LENGTH = 20;
 let disconnectTimer = null;
-let wowPlayingPath = null;
 
-const linkPlayer = (link) => {
+// TODO: Improve player code structure
+// TODO: clean up on "stop" and "clear" commands
+const downloadPlayer = (link, name = null) => {
     const tmpPath = temporaryFile();
     const downloadPromise = downloadFile(link, tmpPath);
     return {
+        name: name ?? `${link}`,
         play: async () => {
             await downloadPromise;
             const resource = createAudioResource(tmpPath, {
@@ -98,13 +102,16 @@ const linkPlayer = (link) => {
                 },
             });
             player.play(resource);
-            wowPlayingPath = tmpPath;
+            player.once(AudioPlayerStatus.Idle, async () => {
+                await fsPromises.rm(tmpPath, { force: true });
+            });
         }
     }
 }
 
-const filePlayer = (path) => {
+const filePlayer = (path, name = null) => {
     return {
+        name: name ?? path,
         play: () => {
             const resource = createAudioResource(path, {
                 metadata: {
@@ -128,6 +135,7 @@ const getSongs = async (target) => {
     return result.length > 0 ? [result[0].item] : null;
 };
 
+// TODO: Improve subcommand parsing + bot responses
 client.on('interactionCreate', async interaction => {
 	if (!interaction.isCommand()) return;
 
@@ -141,20 +149,19 @@ client.on('interactionCreate', async interaction => {
         numWows = numWows > MAX_WOWS ? MAX_WOWS : numWows;
         const wowResponse = await fetch(`https://owen-wilson-wow-api.herokuapp.com/wows/random?results=${numWows}`);
         const wowData = await wowResponse.json();
+        wowData?.forEach((wow) => {
+            queue.push(downloadPlayer(wow.audio, `"${wow.full_line}" ~ ${wow.character} (${wow.movie})`));
+        });
+        if (player.state.status !== 'playing' && queue.length > 0) {
+            queue[0].play();
+        }
         connection = joinVoiceChannel({
             channelId: interaction.member.voice.channel.id,
             guildId: interaction.guildId,
             adapterCreator: interaction.guild.voiceAdapterCreator,
         });
         connection.subscribe(player);
-        wowData?.forEach((wow, i) => {
-            if (queue.length === 0 && i === 0) {
-                linkPlayer(wow.audio).play();
-            } else {
-                queue.push(linkPlayer(wow.audio));
-            }
-        });
-        const wowPlaying = wowData.map((d, i) => `${i + 1}. "${d.full_line}" ~ ${d.character} (${d.movie})`)
+        const wowPlaying = queue.slice(0, MAX_QUEUE_MESSAGE_LENGTH).map((object, i) => `${i + 1}. ${object.name}`)
 		await interaction.reply({ content: 'Wow Playing:\n' + wowPlaying.join('\n'), ephemeral: true });
 	}
 
@@ -165,21 +172,39 @@ client.on('interactionCreate', async interaction => {
             return;
         }
         if (subcommand === 'stop') {
-            player?.stop();
+            player.stop();
             connection?.destroy();
+            queue = [];
             await interaction.reply({ content: 'Wow!', ephemeral: true });
             return;
         } else if (subcommand === 'clear') {
-            player?.stop();
+            player.stop();
             queue = [];
             await interaction.reply({ content: 'Wow!', ephemeral: true });
             return;
         } else if (subcommand === 'skip') {
-            player?.stop();
+            player.stop();
             await interaction.reply({ content: 'Wow!', ephemeral: true });
             return;
-        } else if (subcommand !== 'play') {
-            await interaction.reply({ content: `Error: Unexpected subcommand "${subcommand}"`, ephemeral: true });
+        } else if (subcommand === 'pause') {
+            player.pause();
+            await interaction.reply({ content: 'Wow!', ephemeral: true });
+            return;
+        } else if (subcommand === 'playskip') {
+            queue = [];
+            await interaction.reply({ content: 'Wow!', ephemeral: true });
+            return;
+        } else if (subcommand === 'np') {
+            const wowPlaying = queue.slice(0, MAX_QUEUE_MESSAGE_LENGTH).map((object, i) => `${i + 1}. ${object.name}`)
+            await interaction.reply({ content: 'Wow Playing:\n' + wowPlaying.join('\n'), ephemeral: true });
+            return;
+        } else if (subcommand === 'unpause' || (subcommand === 'play' && !interaction.options.getString('music'))) {
+            if (player.state.status !== 'paused') {
+                await interaction.reply({ content: 'Error: No music currently playing!', ephemeral: true });
+                return;
+            }
+            player.unpause();
+            await interaction.reply({ content: 'Wow!', ephemeral: true });
             return;
         }
         const target = interaction.options.getString('music');
@@ -188,21 +213,19 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply(`Could not find song or album, '${target}`);
             return;
         }
+        paths.forEach(path => {
+            queue.push(filePlayer(path));
+        });
         connection = joinVoiceChannel({
             channelId: interaction.member.voice.channel.id,
             guildId: interaction.guildId,
             adapterCreator: interaction.guild.voiceAdapterCreator,
         });
         connection.subscribe(player);
-        paths.forEach((path, i) => {
-            // TODO: need to properly implement a queue
-            if (queue.length === 0 && i === 0) {
-                filePlayer(path).play();
-            } else {
-                queue.push(filePlayer(path));
-            }
-        });
-        const wowPlaying = paths.map((p, i) => `${i + 1}. "${p}"`)
+        if (player.state.status !== 'playing' && queue.length > 0) {
+            queue[0].play();
+        }
+        const wowPlaying = queue.slice(0, MAX_QUEUE_MESSAGE_LENGTH).map((object, i) => `${i + 1}. ${object.name}`)
 		await interaction.reply({ content: 'Wow Playing:\n' + wowPlaying.join('\n'), ephemeral: true });
     }
 });
@@ -212,20 +235,16 @@ client.on('interactionCreate', async interaction => {
 // ambient wow - slow down 1000x like the Justin bieber slowed down
 // https://soundcloud.com/mesiuepiescha/justin-bieber-u-smile-slowed-down-800?utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing
 
-player.on(AudioPlayerStatus.Idle, async () => {
-    if (wowPlayingPath) {
-        await fsPromises.rm(wowPlayingPath, { force: true });
-        wowPlayingPath = null;
-    }
+player.on(AudioPlayerStatus.Idle, () => {
+    queue.shift();
 
     if (queue.length === 0) {
         disconnectTimer = setTimeout(() => {
-            player?.stop();
+            player.stop();
             connection?.destroy();
-        }, 1000 * 30);
+        }, 1000 * 60);
         return;
     }
 
-    const myPlayer = queue.shift();
-    myPlayer.play();
+    queue[0].play();
 });
