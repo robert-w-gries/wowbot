@@ -17,6 +17,7 @@ const ALBUMS = {
     sounds: 'MouthSounds',
 };
 
+// TODO: Build up database using sqlite
 const ALL_SONGS = [];
 Object.values(ALBUMS).forEach((album) => {
     const files = fs.readdirSync(`${MUSIC_FOLDER}\\${album}`);
@@ -26,8 +27,7 @@ Object.values(ALBUMS).forEach((album) => {
 
 const fuse = new Fuse(ALL_SONGS, {  threshold: 0.5 });
 const SONGS = {
-    wowwow: fuse.search('wow wow')[0].item,
-    bees: fuse.search('wow wow')[0].item,
+    bees: fuse.search('vivid memories')[0].item,
 };
 
 const parseOption = (target, str) => {
@@ -119,7 +119,7 @@ const filePlayer = (path) => {
 const getSongs = async (target) => {
     if (target in ALBUMS) {
         const files = await fsPromises.readdir(`${MUSIC_FOLDER}/${ALBUMS[target]}`);
-        const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3');
+        const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(path => `${MUSIC_FOLDER}\\${ALBUMS[target]}\\${path}`);
         return mp3Files;
     } else if (target in SONGS) {
         return [SONGS[target]];
@@ -136,7 +136,7 @@ client.on('interactionCreate', async interaction => {
         disconnectTimer = null;
     }
 
-	if (interaction.commandName === 'wow') {
+	if (interaction.commandName === 'wowson') {
         let numWows = interaction.options.getInteger('num_wows');
         numWows = numWows > MAX_WOWS ? MAX_WOWS : numWows;
         const wowResponse = await fetch(`https://owen-wilson-wow-api.herokuapp.com/wows/random?results=${numWows}`);
@@ -158,19 +158,30 @@ client.on('interactionCreate', async interaction => {
 		await interaction.reply({ content: 'Wow Playing:\n' + wowPlaying.join('\n'), ephemeral: true });
 	}
 
-    if (interaction.commandName === 'wowstop') {
-        player?.stop();
-        connection?.destroy();
-        await interaction.reply({ content: 'Wow!', ephemeral: true });
-    }
-
-    if (interaction.commandName === 'wowclear') {
-        player?.stop();
-        queue = [];
-        await interaction.reply({ content: 'Wow!', ephemeral: true });
-    }
-
-	if (interaction.commandName === 'wowmix') {
+	if (interaction.commandName === 'wow') {
+        const subcommand = interaction.options.getSubcommand();
+        if (!subcommand) {
+            await interaction.reply({ content: 'Error: Expected subcommand but found none!', ephemeral: true });
+            return;
+        }
+        if (subcommand === 'stop') {
+            player?.stop();
+            connection?.destroy();
+            await interaction.reply({ content: 'Wow!', ephemeral: true });
+            return;
+        } else if (subcommand === 'clear') {
+            player?.stop();
+            queue = [];
+            await interaction.reply({ content: 'Wow!', ephemeral: true });
+            return;
+        } else if (subcommand === 'skip') {
+            player?.stop();
+            await interaction.reply({ content: 'Wow!', ephemeral: true });
+            return;
+        } else if (subcommand !== 'play') {
+            await interaction.reply({ content: `Error: Unexpected subcommand "${subcommand}"`, ephemeral: true });
+            return;
+        }
         const target = interaction.options.getString('music');
         const paths = await getSongs(target);
         if (!paths) {

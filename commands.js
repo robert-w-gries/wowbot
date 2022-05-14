@@ -51,7 +51,7 @@ export async function updateGuildCommand(appId, guildId, command, dryRun=false) 
   }
 }
 
-export async function deleteGuildCommand(appId, guildId, command, dryRun=true) {
+export async function deleteGuildCommand(appId, guildId, command, dryRun=false) {
   assert('id' in command);
   const endpoint = `applications/${appId}/guilds/${guildId}/commands/${command.id}`;
   try {
@@ -67,8 +67,8 @@ export async function deleteGuildCommand(appId, guildId, command, dryRun=true) {
 }
 
 export const COMMAND_LAYOUTS = {
-  wow: {
-    name: 'wow',
+  wowson: {
+    name: 'wowson',
     description: 'Wow!',
     type: 1,
     options: [
@@ -79,27 +79,37 @@ export const COMMAND_LAYOUTS = {
       },
     ],
   },
-  wowmix: {
-    name: 'wowmix',
+  wow: {
+    name: 'wow',
     description: "Wow that's what I call music!",
     type: 1,
     options: [
       {
-        name: 'music',
-        description: 'Wow wow! Type a song or album!',
-        type: 3,
-        required: true,
+        name: 'play',
+        description: 'Wow wow! Play a song or album!',
+        type: 1,
+        options: [{
+          name: 'music',
+          description: 'Song or album to play',
+          type: 3,
+          required: true,
+        }],
       },
+      {
+        name: 'stop',
+        description: 'Wow! Make it stop!',
+        type: 1,
+      },
+      {
+        name: 'clear',
+        description: 'Wow! Clear the queue!',
+        type: 1,
+      },
+      {
+        name: 'skip',
+        description: 'Wow! Next!',
+        type: 1,
+      }
     ],
   },
-  wowstop: {
-    name: 'wowstop',
-    description: "Wow! Make it stop!",
-    type: 1,
-  },
-  wowclear: {
-    name: 'wowclear',
-    description: "Wow! Clear the queue!",
-    type: 1,
-  }
 };
