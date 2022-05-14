@@ -1,9 +1,7 @@
 import { DiscordRequest } from './utils.js';
 import assert from 'node:assert/strict';
 
-// Checks for a command
 export async function getGuildCommands(appId, guildId) {
-  // API endpoint to get and post guild commands
   const endpoint = `applications/${appId}/guilds/${guildId}/commands`;
   const availableCommands = {};
 
@@ -14,27 +12,13 @@ export async function getGuildCommands(appId, guildId) {
       assert('name' in command);
       availableCommands[command.name] = command;
     })
-    /*if (data) {
-      const installedNames = data.map((c) => c['name']);
-      // This is just matching on the name, so it's not good for updates
-      if (!installedNames.includes(command['name'])) {
-        console.log(`Installing "${command['name']}"`);
-        InstallGuildCommand(appId, guildId, command);
-      } else if (shouldUpdate) {
-        console.log(`"${command['name']}" command already installed, deleting and re-installing`);
-        const existingCommand = data.find((c) => c['name'] === command['name']);
-        updateGuildCommand(appId, guildId, existingCommand['id'], command)
-      } else {
-        console.log(`"${command['name']}" command already installed`);
-      }
-    }*/
   } catch (err) {
     console.error(err);
   }
   return availableCommands;
 }
 
-export async function installGuildCommand(appId, guildId, commandName, dryRun=true) {
+export async function installGuildCommand(appId, guildId, commandName, dryRun=false) {
   const endpoint = `applications/${appId}/guilds/${guildId}/commands`;
   try {
     console.log("Installing " + commandName);
@@ -50,7 +34,7 @@ export async function installGuildCommand(appId, guildId, commandName, dryRun=tr
   }
 }
 
-export async function updateGuildCommand(appId, guildId, command, dryRun=true) {
+export async function updateGuildCommand(appId, guildId, command, dryRun=false) {
   assert('id' in command);
   const endpoint = `applications/${appId}/guilds/${guildId}/commands/${command.id}`;
   try {
@@ -101,10 +85,16 @@ export const COMMAND_LAYOUTS = {
     type: 1,
     options: [
       {
-        name: 'neil',
-        description: 'Wow wow!',
-        type: 2,
+        name: 'music',
+        description: 'Wow wow! Type a song or album!',
+        type: 3,
+        required: true,
       },
     ],
+  },
+  wowstop: {
+    name: 'wowstop',
+    description: "Wow! Make it stop!",
+    type: 1,
   }
 };

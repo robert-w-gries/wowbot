@@ -3,9 +3,32 @@ import { Client, Intents } from 'discord.js';
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from '@discordjs/voice';
 import fetch from 'node-fetch';
 import * as fs from 'fs';
+import path from 'node:path';
 import { temporaryFile } from 'tempy';
 import fsPromises from 'node:fs/promises';
+import Fuse from 'fuse.js'
 import { deleteGuildCommand, installGuildCommand, updateGuildCommand, getGuildCommands } from './commands.js';
+
+const MUSIC_FOLDER = process.env.MUSIC_FOLDER;
+const ALBUMS = {
+    dreams: 'MouthDreams',
+    moods: 'MouthMoods',
+    silence: 'MouthSilence',
+    sounds: 'MouthSounds',
+};
+
+const ALL_SONGS = [];
+Object.values(ALBUMS).forEach((album) => {
+    const files = fs.readdirSync(`${MUSIC_FOLDER}\\${album}`);
+    const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(path => `${MUSIC_FOLDER}\\${album}\\${path}`);
+    ALL_SONGS.push(...mp3Files);
+});
+
+const fuse = new Fuse(ALL_SONGS, {  threshold: 0.5 });
+const SONGS = {
+    wowwow: fuse.search('wow wow')[0].item,
+    bees: fuse.search('wow wow')[0].item,
+};
 
 const parseOption = (target, str) => {
     if (!str) {
@@ -63,7 +86,7 @@ const MAX_WOWS = 91;
 let disconnectTimer = null;
 let wowPlayingPath = null;
 
-const filePlayer = (link) => {
+const linkPlayer = (link) => {
     const tmpPath = temporaryFile();
     const downloadPromise = downloadFile(link, tmpPath);
     return {
@@ -80,13 +103,73 @@ const filePlayer = (link) => {
     }
 }
 
+const filePlayer = (path) => {
+    return {
+        play: () => {
+            const resource = createAudioResource(path, {
+                metadata: {
+                    title: 'Wow!',
+                },
+            });
+            player.play(resource);
+        }
+    }
+}
+
+const getSongs = async (target) => {
+    if (target in ALBUMS) {
+        const files = await fsPromises.readdir(`${MUSIC_FOLDER}/${ALBUMS[target]}`);
+        const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3');
+        return mp3Files;
+    } else if (target in SONGS) {
+        return [SONGS[target]];
+    }
+    const result = fuse.search(target, {  includeScore: true });
+    return result.length > 0 ? [result[0].item] : null;
+};
+
 client.on('interactionCreate', async interaction => {
 	if (!interaction.isCommand()) return;
-    
+
+    if (disconnectTimer) {
+        clearTimeout(disconnectTimer);
+        disconnectTimer = null;
+    }
+
 	if (interaction.commandName === 'wow') {
-        if (disconnectTimer) {
-            clearTimeout(disconnectTimer);
-            disconnectTimer = null;
+        let numWows = interaction.options.getInteger('num_wows');
+        numWows = numWows > MAX_WOWS ? MAX_WOWS : numWows;
+        const wowResponse = await fetch(`https://owen-wilson-wow-api.herokuapp.com/wows/random?results=${numWows}`);
+        const wowData = await wowResponse.json();
+        connection = joinVoiceChannel({
+            channelId: interaction.member.voice.channel.id,
+            guildId: interaction.guildId,
+            adapterCreator: interaction.guild.voiceAdapterCreator,
+        });
+        connection.subscribe(player);
+        wowData?.forEach((wow, i) => {
+            if (queue.length === 0 && i === 0) {
+                linkPlayer(wow.audio).play();
+            } else {
+                queue.push(linkPlayer(wow.audio));
+            }
+        });
+        const wowPlaying = wowData.map((d, i) => `${i + 1}. "${d.full_line}" ~ ${d.character} (${d.movie})`)
+		await interaction.reply('Wow Playing:\n' + wowPlaying.join('\n'));
+	}
+
+    if (interaction.commandName === 'wowstop') {
+        player?.stop();
+        connection?.destroy();
+        await interaction.reply({ ephemeral: true });
+    }
+
+	if (interaction.commandName === 'wowmix') {
+        const target = interaction.options.getString('music');
+        const paths = await getSongs(target);
+        if (!paths) {
+            await interaction.reply(`Could not find song '${song}`);
+            return;
         }
         connection = joinVoiceChannel({
             channelId: interaction.member.voice.channel.id,
@@ -94,20 +177,16 @@ client.on('interactionCreate', async interaction => {
             adapterCreator: interaction.guild.voiceAdapterCreator,
         });
         connection.subscribe(player);
-        let numWows = interaction.options.getInteger('num_wows');
-        numWows = numWows > MAX_WOWS ? MAX_WOWS : numWows;
-        const wowResponse = await fetch(`https://owen-wilson-wow-api.herokuapp.com/wows/random?results=${numWows}`);
-        const wowData = await wowResponse.json();
-        wowData?.forEach((wow, i) => {
+        paths.forEach((path, i) => {
             if (queue.length === 0 && i === 0) {
-                filePlayer(wow.audio).play();
+                filePlayer(path).play();
             } else {
-                queue.push(filePlayer(wow.audio));
+                queue.push(filePlayer(path));
             }
         });
-        const wowPlaying = wowData.map((d, i) => `${i + 1}. "${d.full_line}" ~ ${d.character} (${d.movie})`)
+        const wowPlaying = paths.map((p, i) => `${i + 1}. "${p}"`)
 		await interaction.reply('Wow Playing:\n' + wowPlaying.join('\n'));
-	}
+    }
 });
 
 // wow remix - https://www.youtube.com/watch?v=-7r1aeyhTYo
