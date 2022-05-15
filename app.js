@@ -9,6 +9,7 @@ import fsPromises from 'node:fs/promises';
 import Fuse from 'fuse.js'
 import { deleteGuildCommand, installGuildCommand, updateGuildCommand, getGuildCommands } from './commands.js';
 
+// TODO: Typescript
 const MUSIC_FOLDER = process.env.MUSIC_FOLDER;
 const ALBUMS = {
     dreams: 'MouthDreams',
@@ -88,7 +89,6 @@ const MAX_QUEUE_MESSAGE_LENGTH = 20;
 let disconnectTimer = null;
 
 // TODO: Improve player code structure
-// TODO: clean up on "stop" and "clear" commands
 const downloadPlayer = (link, name = null) => {
     const tmpPath = temporaryFile();
     const downloadPromise = downloadFile(link, tmpPath);
@@ -172,9 +172,10 @@ client.on('interactionCreate', async interaction => {
             return;
         }
         if (subcommand === 'stop') {
+            // TODO: clean up on "stop" and "clear" commands
+            queue = [];
             player.stop();
             connection?.destroy();
-            queue = [];
             await interaction.reply({ content: 'Wow!', ephemeral: true });
             return;
         } else if (subcommand === 'clear') {
