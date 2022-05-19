@@ -109,6 +109,7 @@ const downloadPlayer = (link, name = null) => {
     }
 }
 
+// TODO: implement replayGain to normalize audio across played files
 const filePlayer = (path, name = null) => {
     return {
         name: name ?? path,
