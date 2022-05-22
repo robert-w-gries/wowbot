@@ -21,8 +21,9 @@ const ALBUMS = {
 // TODO: Build up database using sqlite
 const ALL_SONGS = [];
 Object.values(ALBUMS).forEach((album) => {
-    const files = fs.readdirSync(`${MUSIC_FOLDER}\\${album}`);
-    const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(path => `${MUSIC_FOLDER}\\${album}\\${path}`);
+    const folderPath = path.join(MUSIC_FOLDER, album);
+    const files = fs.readdirSync(folderPath);
+    const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(p => path.join(MUSIC_FOLDER, album, p));
     ALL_SONGS.push(...mp3Files);
 });
 
@@ -127,7 +128,7 @@ const filePlayer = (path, name = null) => {
 const getSongs = async (target) => {
     if (target in ALBUMS) {
         const files = await fsPromises.readdir(`${MUSIC_FOLDER}/${ALBUMS[target]}`);
-        const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(path => `${MUSIC_FOLDER}\\${ALBUMS[target]}\\${path}`);
+        const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(p => path.join(MUSIC_FOLDER, ALBUMS[target], p));
         return mp3Files;
     } else if (target in SONGS) {
         return [SONGS[target]];
@@ -215,8 +216,8 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply(`Could not find song or album, '${target}`);
             return;
         }
-        paths.forEach(path => {
-            queue.push(filePlayer(path));
+        paths.forEach(p => {
+            queue.push(filePlayer(p));
         });
         connection = joinVoiceChannel({
             channelId: interaction.member.voice.channel.id,
