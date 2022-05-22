@@ -11,25 +11,37 @@ import { deleteGuildCommand, installGuildCommand, updateGuildCommand, getGuildCo
 
 // TODO: Typescript
 const MUSIC_FOLDER = process.env.MUSIC_FOLDER;
-const ALBUMS = {
-    dreams: 'MouthDreams',
-    moods: 'MouthMoods',
-    silence: 'MouthSilence',
-    sounds: 'MouthSounds',
+const ARTISTS = {};
+const ALBUMS = {};
+const SONGS = {};
+const SONG_FILE_TYPES = [
+    '.mp3',
+];
+
+const getFolders = async (dirPath) => (await fsPromises.readdir(dirPath, { withFileTypes: true })).filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
+const getSongs = async (dirPath) => {
+    const files = (await fsPromises.readdir(dirPath, { withFileTypes: true })).filter(dirent => dirent.isFile()).map(dirent => dirent.name);
+    return files.filter((file) =>  SONG_FILE_TYPES.includes(path.win32.extname(file)));
 };
 
 // TODO: Build up database using sqlite
-const ALL_SONGS = [];
-Object.values(ALBUMS).forEach((album) => {
-    const folderPath = path.join(MUSIC_FOLDER, album);
-    const files = fs.readdirSync(folderPath);
-    const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(p => path.join(MUSIC_FOLDER, album, p));
-    ALL_SONGS.push(...mp3Files);
-});
+const artistFolders = await getFolders(MUSIC_FOLDER);
+await Promise.all(artistFolders.map(async (artistFolderName) => {
+    const artistPath = path.join(MUSIC_FOLDER, artistFolderName);
+    const albumFolders = await getFolders(artistPath);
+    ARTISTS[artistFolderName] = albumFolders;
 
-const fuse = new Fuse(ALL_SONGS, {  threshold: 0.5 });
-const SONGS = {
-    bees: fuse.search('vivid memories')[0].item,
+    await Promise.all(albumFolders.map(async (albumFolderName) => {
+        const albumPath = path.join(artistPath, albumFolderName);
+        const songFileNames = await getSongs(albumPath);
+        ALBUMS[albumFolderName] = songFileNames;
+        songFileNames.forEach((songFileName) => SONGS[songFileName] = path.join(albumPath, songFileName));
+    }));
+}));
+
+const fuse = new Fuse(Object.keys(SONGS), {  threshold: 0.6 });
+const HARDCODED_SONGS = {
+    bees: SONGS[fuse.search('vivid memories')[0].item],
 };
 
 const parseOption = (target, str) => {
@@ -125,16 +137,16 @@ const filePlayer = (path, name = null) => {
     }
 }
 
-const getSongs = async (target) => {
+const getSongsToPlay = async (target) => {
     if (target in ALBUMS) {
         const files = await fsPromises.readdir(`${MUSIC_FOLDER}/${ALBUMS[target]}`);
         const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(p => path.join(MUSIC_FOLDER, ALBUMS[target], p));
         return mp3Files;
-    } else if (target in SONGS) {
-        return [SONGS[target]];
+    } else if (target in HARDCODED_SONGS) {
+        return [HARDCODED_SONGS[target]];
     }
     const result = fuse.search(target, {  includeScore: true });
-    return result.length > 0 ? [result[0].item] : null;
+    return result.length > 0 ? [SONGS[result[0].item]] : null;
 };
 
 // TODO: Improve subcommand parsing + bot responses
@@ -211,7 +223,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
         const target = interaction.options.getString('music');
-        const paths = await getSongs(target);
+        const paths = await getSongsToPlay(target);
         if (!paths) {
             await interaction.reply(`Could not find song or album, '${target}`);
             return;
