@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from '@discordjs/voice';
 import fetch from 'node-fetch';
 import * as fs from 'fs';
@@ -20,7 +20,7 @@ const SONG_FILE_TYPES = [
 
 const getFolders = async (dirPath) => (await fsPromises.readdir(dirPath, { withFileTypes: true })).filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
 const getSongs = async (dirPath) => {
-    const files = (await fsPromises.readdir(dirPath, { withFileTypes: true })).filter(dirent => dirent.isFile()).map(dirent => dirent.name);
+    const files = (await fsPromises.readdir(dirPath, { withFileTypes: true })).filter(dirent => dirent.isFile()).map(dirent => `${dirPath}/${dirent.name}`);
     return files.filter((file) =>  SONG_FILE_TYPES.includes(path.win32.extname(file)));
 };
 
@@ -35,7 +35,8 @@ await Promise.all(artistFolders.map(async (artistFolderName) => {
         const albumPath = path.join(artistPath, albumFolderName);
         const songFileNames = await getSongs(albumPath);
         ALBUMS[albumFolderName] = songFileNames;
-        songFileNames.forEach((songFileName) => SONGS[songFileName] = path.join(albumPath, songFileName));
+        songFileNames.forEach((songFileName) => SONGS[songFileName] = path.join(artistPath, albumPath, songFileName));
+        console.log(SONGS);
     }));
 }));
 
@@ -98,7 +99,7 @@ let connection = null;
 const player = createAudioPlayer({ behaviors: { noSubscriber: 'pause' }});
 let queue = [];
 const MAX_WOWS = 91;
-const MAX_QUEUE_MESSAGE_LENGTH = 20;
+const MAX_QUEUE_MESSAGE_LENGTH = 30;
 let disconnectTimer = null;
 
 // TODO: Improve player code structure
@@ -139,8 +140,10 @@ const filePlayer = (path, name = null) => {
 
 const getSongsToPlay = async (target) => {
     if (target in ALBUMS) {
-        const files = await fsPromises.readdir(`${MUSIC_FOLDER}/${ALBUMS[target]}`);
-        const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(p => path.join(MUSIC_FOLDER, ALBUMS[target], p));
+        // console.log({ MUSIC_FOLDER, ALBUMS, target })
+        // const files = await fsPromises.readdir(`${MUSIC_FOLDER}/${target}`);
+        // const mp3Files = files.filter(file => path.win32.extname(file) === '.mp3').map(p => path.join(MUSIC_FOLDER, ALBUMS[target], p));
+        const mp3Files = ALBUMS[target];
         return mp3Files;
     } else if (target in HARDCODED_SONGS) {
         return [HARDCODED_SONGS[target]];
@@ -229,9 +232,16 @@ client.on('interactionCreate', async interaction => {
             return;
         }
         const target = interaction.options.getString('music');
-        const paths = await getSongsToPlay(target);
+        let paths;
+        try {
+            paths = await getSongsToPlay(target);
+        } catch (e) {
+            console.error(e);
+            await interaction.reply({ content: `Wow! An error occurred while trying to play: ${target}`, ephemeral: true });
+            return;
+        }
         if (!paths) {
-            await interaction.reply(`Could not find song or album, '${target}`);
+            await interaction.reply({ content: `Could not find song or album, '${target}`, ephemeral: true });
             return;
         }
         paths.forEach(p => {
