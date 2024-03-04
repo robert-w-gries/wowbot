@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, Intents } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, joinVoiceChannel } from '@discordjs/voice';
 import fetch from 'node-fetch';
 import * as fs from 'fs';
@@ -70,7 +70,7 @@ const downloadFile = (async (url, path) => {
     });
 });
 
-const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
 
 // TODO: Split out command management to separte 'manage.js' script
 client.once('ready', async () => {
@@ -149,6 +149,8 @@ const getSongsToPlay = async (target) => {
     return result.length > 0 ? [SONGS[result[0].item]] : null;
 };
 
+const WOW_API_URL = 'https://owen-wilson-wow-api.onrender.com/wows/random';
+
 // TODO: Improve subcommand parsing + bot responses
 client.on('interactionCreate', async interaction => {
 	if (!interaction.isCommand()) return;
@@ -161,11 +163,15 @@ client.on('interactionCreate', async interaction => {
 	if (interaction.commandName === 'wowson') {
         let numWows = interaction.options.getInteger('num_wows');
         numWows = numWows > MAX_WOWS ? MAX_WOWS : numWows;
-        const wowResponse = await fetch(`https://owen-wilson-wow-api.herokuapp.com/wows/random?results=${numWows}`);
-        const wowData = await wowResponse.json();
-        wowData?.forEach((wow) => {
-            queue.push(downloadPlayer(wow.audio, `"${wow.full_line}" ~ ${wow.character} (${wow.movie})`));
-        });
+        try {
+            const wowResponse = await fetch(`${WOW_API_URL}?results=${numWows}`);
+            const wowData = await wowResponse.json();
+            wowData?.forEach((wow) => {
+                queue.push(downloadPlayer(wow.audio, `"${wow.full_line}" ~ ${wow.character} (${wow.movie})`));
+            });
+        } catch (e) {
+            console.error(e);
+        }
         if (player.state.status !== 'playing' && queue.length > 0) {
             queue[0].play();
         }
