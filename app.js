@@ -35,7 +35,7 @@ await Promise.all(artistFolders.map(async (artistFolderName) => {
         const albumPath = path.join(artistPath, albumFolderName);
         const songFileNames = await getSongs(albumPath);
         ALBUMS[albumFolderName] = songFileNames;
-        songFileNames.forEach((songFileName) => SONGS[songFileName] = path.join(artistPath, albumPath, songFileName));
+        songFileNames.forEach((songFilePath) => SONGS[path.basename(songFilePath, '.mp3')] = songFilePath);
         console.log(SONGS);
     }));
 }));
